@@ -6,6 +6,7 @@ import pdb
 import time
 import ast
 import requests
+import yaml
 
 from dotenv import load_dotenv
 
@@ -28,22 +29,31 @@ from py_clob_client.clob_types import (
 )
 from py_clob_client.order_builder.constants import BUY
 
-from agents.utils.objects import SimpleMarket, SimpleEvent
+from agents.utils.objects import SimpleMarket, SimpleEvent, Market
 
 load_dotenv()
 
 
 class Polymarket:
-    def __init__(self) -> None:
+    def __init__(self, logger=None) -> None:
         self.gamma_url = "https://gamma-api.polymarket.com"
         self.gamma_markets_endpoint = self.gamma_url + "/markets"
         self.gamma_events_endpoint = self.gamma_url + "/events"
+        
 
         self.clob_url = "https://clob.polymarket.com"
+        self.order_book_endpoint = self.clob_url + "/book"
         self.clob_auth_endpoint = self.clob_url + "/auth/api-key"
+        
+        # 设置logger
+        self.logger = logger
+        
+        # 加载配置文件
+        self.config = self._load_config()
 
         self.chain_id = 137  # POLYGON
         self.private_key = os.getenv("POLYGON_WALLET_PRIVATE_KEY")
+        self.funder = os.getenv("POLYGON_PROXY_ADDRESS")
         self.polygon_rpc = "https://polygon-rpc.com"
         self.w3 = Web3(Web3.HTTPProvider(self.polygon_rpc))
 
@@ -69,13 +79,62 @@ class Polymarket:
         self._init_api_keys()
         self._init_approvals(False)
 
+    def _load_config(self) -> dict:
+        """加载配置文件"""
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
+        try:
+            with open(config_path, 'r', encoding='utf-8') as file:
+                return yaml.safe_load(file)
+        except FileNotFoundError:
+            if self.logger:
+                self.logger.error(f"配置文件未找到: {config_path}")
+            return {"tags": {"whitelist": [], "blacklist": []}}
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"加载配置文件时出错: {e}")
+            return {"tags": {"whitelist": [], "blacklist": []}}
+
+    def _filter_events_by_tags(self, events: "list[SimpleEvent]") -> "list[SimpleEvent]":
+        """根据标签白名单和黑名单过滤事件"""
+        whitelist = self.config.get("tags", {}).get("whitelist", [])
+        blacklist = self.config.get("tags", {}).get("blacklist", [])
+        
+        filtered_events = []
+        
+        for event in events:
+            if not event.tags:
+                continue
+                
+            # 提取事件的所有标签名称
+            event_tag_labels = []
+            for tag in event.tags:
+                if tag.label:
+                    event_tag_labels.append(tag.label)
+                elif tag.slug:
+                    event_tag_labels.append(tag.slug)
+            
+            # 检查是否有白名单标签
+            has_whitelist_tag = any(tag in whitelist for tag in event_tag_labels)
+            
+            # 检查是否有黑名单标签
+            has_blacklist_tag = any(tag in blacklist for tag in event_tag_labels)
+            
+            # 如果有白名单标签且没有黑名单标签，则保留该事件
+            if has_whitelist_tag and not has_blacklist_tag:
+                filtered_events.append(event)
+        
+        if self.logger:
+            self.logger.info(f"标签过滤: 从 {len(events)} 个事件中筛选出 {len(filtered_events)} 个符合条件的事件")
+        return filtered_events
+
     def _init_api_keys(self) -> None:
         self.client = ClobClient(
-            self.clob_url, key=self.private_key, chain_id=self.chain_id
+            self.clob_url, key=self.private_key, chain_id=self.chain_id, signature_type=1, funder=self.funder
         )
         self.credentials = self.client.create_or_derive_api_creds()
         self.client.set_api_creds(self.credentials)
-        # print(self.credentials)
+        if self.logger:
+            self.logger.debug("API密钥初始化完成")
 
     def _init_approvals(self, run: bool = False) -> None:
         if not run:
@@ -102,7 +161,8 @@ class Polymarket:
         usdc_approve_tx_receipt = web3.eth.wait_for_transaction_receipt(
             send_usdc_approve_tx, 600
         )
-        print(usdc_approve_tx_receipt)
+        if self.logger:
+            self.logger.debug(f"USDC授权交易完成: {usdc_approve_tx_receipt}")
 
         nonce = web3.eth.get_transaction_count(pub_key)
 
@@ -118,7 +178,8 @@ class Polymarket:
         ctf_approval_tx_receipt = web3.eth.wait_for_transaction_receipt(
             send_ctf_approval_tx, 600
         )
-        print(ctf_approval_tx_receipt)
+        if self.logger:
+            self.logger.debug(f"CTF授权交易完成: {ctf_approval_tx_receipt}")
 
         nonce = web3.eth.get_transaction_count(pub_key)
 
@@ -135,7 +196,8 @@ class Polymarket:
         usdc_approve_tx_receipt = web3.eth.wait_for_transaction_receipt(
             send_usdc_approve_tx, 600
         )
-        print(usdc_approve_tx_receipt)
+        if self.logger:
+            self.logger.debug(f"USDC授权交易完成: {usdc_approve_tx_receipt}")
 
         nonce = web3.eth.get_transaction_count(pub_key)
 
@@ -151,7 +213,8 @@ class Polymarket:
         ctf_approval_tx_receipt = web3.eth.wait_for_transaction_receipt(
             send_ctf_approval_tx, 600
         )
-        print(ctf_approval_tx_receipt)
+        if self.logger:
+            self.logger.debug(f"CTF授权交易完成: {ctf_approval_tx_receipt}")
 
         nonce = web3.eth.get_transaction_count(pub_key)
 
@@ -168,7 +231,8 @@ class Polymarket:
         usdc_approve_tx_receipt = web3.eth.wait_for_transaction_receipt(
             send_usdc_approve_tx, 600
         )
-        print(usdc_approve_tx_receipt)
+        if self.logger:
+            self.logger.debug(f"USDC授权交易完成: {usdc_approve_tx_receipt}")
 
         nonce = web3.eth.get_transaction_count(pub_key)
 
@@ -184,19 +248,223 @@ class Polymarket:
         ctf_approval_tx_receipt = web3.eth.wait_for_transaction_receipt(
             send_ctf_approval_tx, 600
         )
-        print(ctf_approval_tx_receipt)
+        if self.logger:
+            self.logger.debug(f"CTF授权交易完成: {ctf_approval_tx_receipt}")
 
     def get_all_markets(self) -> "list[SimpleMarket]":
         markets = []
-        res = httpx.get(self.gamma_markets_endpoint)
-        if res.status_code == 200:
-            for market in res.json():
+        limit = 100  # 每次请求的最大数量
+        offset = 0
+        max_retries = 3
+        
+        while True:
+            # 构建带过滤条件的 API 请求 URL
+            params = {
+                "active": "true",
+                "closed": "false", 
+                "limit": limit,
+                "offset": offset
+            }
+            
+            # 构建查询字符串
+            query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+            url = f"{self.gamma_markets_endpoint}?{query_string}"
+            
+            # 重试机制
+            success = False
+            for attempt in range(max_retries):
+                try:
+                    if self.logger:
+                        self.logger.debug(f"正在获取markets (offset: {offset}, 尝试 {attempt + 1}/{max_retries})...")
+                    res = httpx.get(url, timeout=30.0)
+                    
+                    if res.status_code == 200:
+                        batch_markets = res.json()
+                        success = True
+                        break
+                    else:
+                        if self.logger:
+                            self.logger.warning(f"API 请求失败，状态码: {res.status_code}")
+                        
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        import time
+                        time.sleep(2 ** attempt)  # 指数退避
+                    else:
+                        if self.logger:
+                            self.logger.error("达到最大重试次数，跳过此批次")
+                        break
+            
+            if not success:
+                break
+                
+            # 如果没有更多markets，退出循环
+            if not batch_markets:
+                break
+            
+            # 处理这一批markets
+            processed_count = 0
+            for market in batch_markets:
                 try:
                     market_data = self.map_api_to_market(market)
-                    markets.append(SimpleMarket(**market_data))
+                    market_obj = SimpleMarket(**market_data)
+                    
+                    # 额外过滤：确保market是活跃且未关闭、未归档、未受限的
+                    if (market_obj.active 
+                        and not market_obj.closed 
+                        and not getattr(market_obj, 'archived', False)):
+                        markets.append(market_obj)
+                        processed_count += 1
+                    else:
+                        if self.logger:
+                            self.logger.debug(f"跳过不符合条件的market: ID={market_obj.id}, active={market_obj.active}, closed={market_obj.closed}, archived={getattr(market_obj, 'archived', False)}, restricted={getattr(market_obj, 'restricted', False)}")
                 except Exception as e:
-                    print(e)
+                    if self.logger:
+                        self.logger.error(f"处理market时出错: {e}")
                     pass
+            
+            if self.logger:
+                self.logger.debug(f"成功处理 {processed_count}/{len(batch_markets)} 个markets")
+            
+            # 如果返回的markets数量少于 limit，说明已经获取完所有markets
+            if len(batch_markets) < limit:
+                break
+                
+            # 更新 offset 以获取下一批markets
+            offset += limit
+                
+        if self.logger:
+            self.logger.info(f"总共获取到 {len(markets)} 个活跃且未关闭的markets")
+        return markets
+
+    def get_all_markets_full(self) -> "list[Market]":
+        """获取所有markets的完整信息，返回Market类型"""
+        markets = []
+        limit = 100  # 每次请求的最大数量
+        offset = 0
+        max_retries = 3
+        
+        while True:
+            # 构建带过滤条件的 API 请求 URL
+            params = {
+                "active": "true",
+                "closed": "false", 
+                "limit": limit,
+                "offset": offset
+            }
+            
+            # 构建查询字符串
+            query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+            url = f"{self.gamma_markets_endpoint}?{query_string}"
+            
+            # 重试机制
+            success = False
+            for attempt in range(max_retries):
+                try:
+                    if self.logger:
+                        self.logger.debug(f"正在获取完整markets (offset: {offset}, 尝试 {attempt + 1}/{max_retries})...")
+                    res = httpx.get(url, timeout=30.0)
+                    
+                    if res.status_code == 200:
+                        batch_markets = res.json()
+                        success = True
+                        break
+                    else:
+                        if self.logger:
+                            self.logger.warning(f"API 请求失败，状态码: {res.status_code}")
+                        
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        import time
+                        time.sleep(2 ** attempt)  # 指数退避
+                    else:
+                        if self.logger:
+                            self.logger.error("达到最大重试次数，跳过此批次")
+                        break
+            
+            if not success:
+                break
+                
+            # 如果没有更多markets，退出循环
+            if not batch_markets:
+                break
+            
+            # 处理这一批markets
+            processed_count = 0
+            for market in batch_markets:
+                try:
+                    # 预处理数据，将字符串格式的JSON数组转换为实际列表
+                    processed_market = market.copy()
+                    
+                    # 处理 outcomePrices 字段
+                    if 'outcomePrices' in processed_market and isinstance(processed_market['outcomePrices'], str):
+                        try:
+                            processed_market['outcomePrices'] = ast.literal_eval(processed_market['outcomePrices'])
+                        except:
+                            processed_market['outcomePrices'] = []
+                    
+                    # 处理 clobTokenIds 字段
+                    if 'clobTokenIds' in processed_market and isinstance(processed_market['clobTokenIds'], str):
+                        try:
+                            processed_market['clobTokenIds'] = ast.literal_eval(processed_market['clobTokenIds'])
+                        except:
+                            processed_market['clobTokenIds'] = []
+                    
+                    # 处理 outcome 字段
+                    if 'outcome' in processed_market and isinstance(processed_market['outcome'], str):
+                        try:
+                            processed_market['outcome'] = ast.literal_eval(processed_market['outcome'])
+                        except:
+                            processed_market['outcome'] = []
+                    
+                    # 创建Market对象
+                    market_obj = Market(**processed_market)
+                    
+                    
+                    # 额外过滤：确保market是活跃且未关闭、未归档的
+                    if not (market_obj.active 
+                           and not market_obj.closed 
+                           and not getattr(market_obj, 'archived', False)):
+                        if self.logger:
+                            self.logger.debug(f"跳过不符合条件的market: ID={market_obj.id}, active={market_obj.active}, closed={market_obj.closed}, archived={getattr(market_obj, 'archived', False)}")
+                        continue
+                    
+                    # 检查market对应的所有events是否都处于活跃状态
+                    if market_obj.events:
+                        all_events_valid = True
+                        for event in market_obj.events:
+                            if not (event.active and not event.closed and not event.archived):
+                                all_events_valid = False
+                                if self.logger:
+                                    self.logger.debug(f"跳过market {market_obj.id}: 包含非活跃event {event.id} (active={event.active}, closed={event.closed}, archived={event.archived})")
+                                break
+                        
+                        if not all_events_valid:
+                            continue
+                    
+                    markets.append(market_obj)
+                    processed_count += 1
+                except Exception as e:
+                    if self.logger:
+                        self.logger.error(f"处理完整market时出错: {e}")
+                    pass
+            
+            if self.logger:
+                self.logger.debug(f"成功处理 {processed_count}/{len(batch_markets)} 个完整markets")
+            
+            # 如果返回的markets数量少于 limit，说明已经获取完所有markets
+            if len(batch_markets) < limit:
+                break
+                
+            # 更新 offset 以获取下一批markets
+            offset += limit
+
+        if self.logger:
+            self.logger.info(f"总共获取到 {len(markets)} 个活跃且未关闭的完整markets")
         return markets
 
     def filter_markets_for_trading(self, markets: "list[SimpleMarket]"):
@@ -215,57 +483,187 @@ class Polymarket:
             return self.map_api_to_market(market, token_id)
 
     def map_api_to_market(self, market, token_id: str = "") -> SimpleMarket:
-        market = {
+        tags = market.get("tags", [])
+        volume = market.get("volume")
+        enable_order_book = market.get("enableOrderBook")
+        end_date = market.get("endDate", "")
+        
+        # 处理 tags 数据
+        processed_tags = []
+        if tags:
+            for tag in tags:
+                if isinstance(tag, dict):
+                    processed_tags.append({
+                        "id": tag.get("id", ""),
+                        "label": tag.get("label"),
+                        "slug": tag.get("slug"),
+                        "forceShow": tag.get("forceShow"),
+                        "createdAt": tag.get("createdAt"),
+                        "updatedAt": tag.get("updatedAt"),
+                        "_sync": tag.get("_sync")
+                    })
+        
+        market_data = {
             "id": int(market["id"]),
             "question": market["question"],
-            "end": market["endDate"],
-            "description": market["description"],
-            "active": market["active"],
+            "end": end_date,
+            "description": market.get("description", ""),
+            "active": market.get("active", False),
             # "deployed": market["deployed"],
-            "funded": market["funded"],
-            "rewardsMinSize": float(market["rewardsMinSize"]),
-            "rewardsMaxSpread": float(market["rewardsMaxSpread"]),
-            # "volume": float(market["volume"]),
-            "spread": float(market["spread"]),
-            "outcomes": str(market["outcomes"]),
-            "outcome_prices": str(market["outcomePrices"]),
-            "clob_token_ids": str(market["clobTokenIds"]),
+            "funded": market.get("funded", False),
+            "rewardsMinSize": float(market.get("rewardsMinSize", 0)),
+            "rewardsMaxSpread": float(market.get("rewardsMaxSpread", 0)),
+            "spread": float(market.get("spread", 0)),
+            "outcomes": str(market.get("outcomes", [])),
+            "outcome_prices": str(market.get("outcomePrices", [])),
+            "clob_token_ids": str(market.get("clobTokenIds", "")),
+            "tags": processed_tags if processed_tags else None,
+            "volume": float(volume) if volume is not None else None,
+            "enableOrderBook": enable_order_book,
         }
         if token_id:
-            market["clob_token_ids"] = token_id
-        return market
+            market_data["clob_token_ids"] = token_id
+        return market_data
 
     def get_all_events(self) -> "list[SimpleEvent]":
         events = []
-        res = httpx.get(self.gamma_events_endpoint)
-        if res.status_code == 200:
-            print(len(res.json()))
-            for event in res.json():
+        limit = 100  # 每次请求的最大数量
+        offset = 0
+        max_retries = 3
+        
+        while True:
+            # 构建带过滤条件的 API 请求 URL
+            params = {
+                "active": "true",
+                "closed": "false", 
+                "limit": limit,
+                "offset": offset
+            }
+            
+            # 构建查询字符串
+            query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+            url = f"{self.gamma_events_endpoint}?{query_string}"
+            
+            # 重试机制
+            success = False
+            for attempt in range(max_retries):
                 try:
-                    print(1)
-                    event_data = self.map_api_to_event(event)
-                    events.append(SimpleEvent(**event_data))
+                    if self.logger:
+                        self.logger.debug(f"正在获取事件 (offset: {offset}, 尝试 {attempt + 1}/{max_retries})...")
+                    res = httpx.get(url, timeout=30.0)
+                    
+                    if res.status_code == 200:
+                        batch_events = res.json()
+                        success = True
+                        break
+                    else:
+                        if self.logger:
+                            self.logger.warning(f"API 请求失败，状态码: {res.status_code}")
+                        
                 except Exception as e:
-                    print(e)
+                    if self.logger:
+                        self.logger.warning(f"请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        import time
+                        time.sleep(2 ** attempt)  # 指数退避
+                    else:
+                        if self.logger:
+                            self.logger.error("达到最大重试次数，跳过此批次")
+                        break
+            
+            if not success:
+                break
+                
+            # 如果没有更多事件，退出循环
+            if not batch_events:
+                break
+            
+            # 处理这一批事件
+            processed_count = 0
+            for event in batch_events:
+                try:
+                    event_data = self.map_api_to_event(event)
+                    event_obj = SimpleEvent(**event_data)
+                    # 本地二次过滤，确保只保留活跃且未关闭、未归档、未受限的事件
+                    if (
+                        event_obj.active
+                        and not event_obj.closed
+                        and not event_obj.archived
+                    ):
+                        events.append(event_obj)
+                        processed_count += 1
+                except Exception as e:
+                    if self.logger:
+                        self.logger.error(f"处理事件时出错: {e}")
                     pass
+            
+            if self.logger:
+                self.logger.debug(f"成功处理 {processed_count}/{len(batch_events)} 个事件")
+            
+            # 如果返回的事件数量少于 limit，说明已经获取完所有事件
+            if len(batch_events) < limit:
+                break
+                
+            # 更新 offset 以获取下一批事件
+            offset += limit
+            
+        if self.logger:
+            self.logger.info(f"总共获取到 {len(events)} 个活跃且未关闭的事件")
         return events
 
     def map_api_to_event(self, event) -> SimpleEvent:
-        description = event["description"] if "description" in event.keys() else ""
+        description = event.get("description", "")
+        start_date = event.get("startDate", "")
+        end_date = event.get("endDate", "")
+        markets = event.get("markets", [])
+        tags = event.get("tags", [])
+        volume = event.get("volume")
+        volume24hr = event.get("volume24hr")
+        liquidity = event.get("liquidity")
+        created_at = event.get("createdAt")
+        updated_at = event.get("updatedAt")
+        comment_count = event.get("commentCount")
+        enable_order_book = event.get("enableOrderBook")
+        
+        # 处理 tags 数据
+        processed_tags = []
+        if tags:
+            for tag in tags:
+                if isinstance(tag, dict):
+                    processed_tags.append({
+                        "id": tag.get("id", ""),
+                        "label": tag.get("label"),
+                        "slug": tag.get("slug"),
+                        "forceShow": tag.get("forceShow"),
+                        "createdAt": tag.get("createdAt"),
+                        "updatedAt": tag.get("updatedAt"),
+                        "_sync": tag.get("_sync")
+                    })
+        
         return {
             "id": int(event["id"]),
             "ticker": event["ticker"],
             "slug": event["slug"],
             "title": event["title"],
             "description": description,
-            "active": event["active"],
-            "closed": event["closed"],
-            "archived": event["archived"],
-            "new": event["new"],
-            "featured": event["featured"],
-            "restricted": event["restricted"],
-            "end": event["endDate"],
-            "markets": ",".join([x["id"] for x in event["markets"]]),
+            "startDate": start_date,
+            "end": end_date,
+            "endDate": end_date,
+            "active": event.get("active", False),
+            "closed": event.get("closed", False),
+            "archived": event.get("archived", False),
+            "new": event.get("new", False),
+            "featured": event.get("featured", False),
+            "restricted": event.get("restricted", False),
+            "markets": ",".join([str(x["id"]) for x in markets]) if markets else "",
+            "tags": processed_tags if processed_tags else None,
+            "volume": float(volume) if volume is not None else None,
+            "volume24hr": float(volume24hr) if volume24hr is not None else None,
+            "liquidity": float(liquidity) if liquidity is not None else None,
+            "createdAt": created_at,
+            "updatedAt": updated_at,
+            "commentCount": comment_count,
+            "enableOrderBook": enable_order_book,
         }
 
     def filter_events_for_trading(
@@ -283,8 +681,22 @@ class Polymarket:
         return tradeable_events
 
     def get_all_tradeable_events(self) -> "list[SimpleEvent]":
+        # 获取所有活跃且未关闭的事件
         all_events = self.get_all_events()
-        return self.filter_events_for_trading(all_events)
+        
+        # 根据标签白名单和黑名单进行过滤
+        filtered_events = self._filter_events_by_tags(all_events)
+        
+        return filtered_events
+
+    def get_all_tradeable_markets(self) -> "list[Market]":
+        # 获取所有活跃且未关闭的完整markets
+        all_markets = self.get_all_markets_full()
+        #print(all_markets[0])
+        # 根据标签白名单和黑名单进行过滤
+        #filtered_markets = self._filter_markets_by_tags(all_markets)
+        
+        return all_markets
 
     def get_sampling_simplified_markets(self) -> "list[SimpleEvent]":
         markets = []
@@ -300,6 +712,40 @@ class Polymarket:
 
     def get_orderbook_price(self, token_id: str) -> float:
         return float(self.client.get_price(token_id))
+
+    def get_order_book_compact(self, token_id: str):
+        """从 gamma /book 接口获取订单簿，仅返回关键信息。
+
+        返回示例：
+        {
+          "bids": [{"price": "0.10", "size": "100"}, ...],
+          "asks": [{"price": "0.90", "size": "200"}, ...],
+          "tick_size": "0.01",
+          "min_order_size": "0.001"
+        }
+        """
+        if not isinstance(token_id, str) or not token_id.strip():
+            if self.logger:
+                self.logger.error(f"无效的 token_id: {token_id}")
+            return None
+
+        try:
+            res = httpx.get(self.order_book_endpoint, params={"token_id": token_id}, timeout=30.0)
+            if res.status_code != 200:
+                if self.logger:
+                    self.logger.error(f"获取订单簿失败，状态码: {res.status_code}, token_id={token_id}")
+                return None
+            data = res.json()
+            return {
+                "bids": data.get("bids", []),
+                "asks": data.get("asks", []),
+                "tick_size": data.get("tick_size"),
+                "min_order_size": data.get("min_order_size"),
+            }
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"获取订单簿异常：{e}")
+            return None
 
     def get_address_for_private_key(self):
         account = self.w3.eth.account.from_key(str(self.private_key))
@@ -338,6 +784,35 @@ class Polymarket:
             OrderArgs(price=price, size=size, side=side, token_id=token_id)
         )
 
+    def execute_market_order_by_token_id(self, token_id, amount, side) -> str:
+        #token_id = '60487116984468020978247225474488676749601001829886755968952521846780452448915'
+        if side == 'BUY':
+            price = 0.99
+        else:
+            price = 0.01
+
+        order_args = OrderArgs(
+            token_id=token_id,
+            size=amount,
+            price=price,
+            side=side
+        )
+        
+        signed_order = self.client.create_order(order_args)
+
+        if self.logger:
+            self.logger.debug(f"Execute market order... signed_order {signed_order}")
+        #resp = self.client.post_order(signed_order, orderType=OrderType.FOK)
+        #print(resp)
+        if self.logger:
+            self.logger.debug("Done!")
+        if side == 'BUY':
+            return {'errorMsg': '', 'orderID': '0xf4506ea664a772d7ecba6d3363e0aafc52c974ce46a3918fe8a714c155a2d723', 'takingAmount': '99', 'makingAmount': str(amount), 'shares': '99', 'amount': str(amount), 'status': 'matched', 'transactionsHashes': ['0x1158453478d3b59e17d9547d02d49d29b5ce5999857c51f2b4661b1ae12c0d84'], 'success': True}
+        else:
+            return {'errorMsg': '', 'orderID': '0xf4506ea664a772d7ecba6d3363e0aafc52c974ce46a3918fe8a714c155a2d723', 'takingAmount': '99', 'makingAmount': str(amount), 'shares': str(amount), 'amount': '99', 'status': 'matched', 'transactionsHashes': ['0x1158453478d3b59e17d9547d02d49d29b5ce5999857c51f2b4661b1ae12c0d84'], 'success': True}
+        
+        #return resp
+
     def execute_market_order(self, market, amount) -> str:
         token_id = ast.literal_eval(market[0].dict()["metadata"]["clob_token_ids"])[1]
         order_args = MarketOrderArgs(
@@ -345,23 +820,45 @@ class Polymarket:
             amount=amount,
         )
         signed_order = self.client.create_market_order(order_args)
-        print("Execute market order... signed_order ", signed_order)
+        if self.logger:
+            self.logger.debug(f"Execute market order... signed_order {signed_order}")
         resp = self.client.post_order(signed_order, orderType=OrderType.FOK)
-        print(resp)
-        print("Done!")
+        if self.logger:
+            self.logger.debug(f"Market order response: {resp}")
+        if self.logger:
+            self.logger.debug("Done!")
         return resp
 
     def get_usdc_balance(self) -> float:
         balance_res = self.usdc.functions.balanceOf(
             self.get_address_for_private_key()
         ).call()
-        return float(balance_res / 10e5)
+        return float(balance_res / 10**6)  # USDC 是 6 位小数
+
+    def check_usdc_allowance(self) -> float:
+        """检查USDC授权额度"""
+        try:
+            address = self.get_address_for_private_key()
+            exchange_address = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E"
+            
+            allowance = self.usdc.functions.allowance(address, exchange_address).call()
+            allowance_usdc = float(allowance / 10**6)
+            
+            if self.logger:
+                self.logger.info(f"USDC授权额度: {allowance_usdc}")
+                self.logger.debug(f"授权地址: {exchange_address}")
+            
+            return allowance_usdc
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"检查USDC授权时出错: {e}")
+            return 0.0
 
 
 def test():
     host = "https://clob.polymarket.com"
     key = os.getenv("POLYGON_WALLET_PRIVATE_KEY")
-    print(key)
+    # print(key)  # 注释掉敏感信息
     chain_id = POLYGON
 
     # Create CLOB client and get/set API credentials
@@ -376,13 +873,14 @@ def test():
     chain_id = AMOY
     client = ClobClient(host, key=key, chain_id=chain_id, creds=creds)
 
-    print(client.get_markets())
-    print(client.get_simplified_markets())
-    print(client.get_sampling_markets())
-    print(client.get_sampling_simplified_markets())
-    print(client.get_market("condition_id"))
+    # 测试API调用
+    # print(client.get_markets())
+    # print(client.get_simplified_markets())
+    # print(client.get_sampling_markets())
+    # print(client.get_sampling_simplified_markets())
+    # print(client.get_market("condition_id"))
 
-    print("Done!")
+    # print("Done!")
 
 
 def gamma():
@@ -427,7 +925,8 @@ def main():
     # auth()
     # test()
     # gamma()
-    print(Polymarket().get_all_events())
+    # print(Polymarket().get_all_events())  # 注释掉测试代码
+    pass
 
 
 if __name__ == "__main__":

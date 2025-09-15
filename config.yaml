@@ -1,0 +1,108 @@
+# 盘口标签配置
+tags:
+  # 白名单标签
+  whitelist:
+    - Fed
+  
+  # 黑名单标签
+  blacklist:
+    - Sports
+
+# 本地数据库路径
+db:
+  path: "./data"
+
+# 日志配置
+logging:
+  # 日志文件存储路径
+  path: "./logs"
+
+# 交易时间缓冲配置
+trading:
+  # 市场关闭前的缓冲时间（分钟）
+  market_close_buffer_minutes: 10
+  # 是否启用时间缓冲检查
+  enable_time_buffer: true
+
+# 搜索配置（对应 agents/connectors/search.py / Search）
+search:
+  # 返回的最大条数
+  length: 10
+  # 搜索深度：basic 或 advanced
+  type: basic
+  # 并发工作线程数
+  workers: 5
+  # 最大同时搜索的query数量限制
+  max_search_queries: 5
+
+# 内容抽取配置（对应 agents/connectors/extract.py / Extract）
+extract:
+  # 抽取深度：basic 或 advanced
+  depth: basic
+  # 最大同时抽取的URL数量限制
+  max_extract_url_num: 5
+  # 最大文本长度限制（单词数）
+  max_text_length: 5000
+
+# 新闻配置（对应 agents/connectors/news.py / News）
+news:
+  # 每页返回的最大条数
+  page_size: 10
+  # 新闻分类（可选：business, entertainment, general, health, science, sports, technology）
+  categories:
+    - business
+    - entertainment
+    - general
+    - health
+    - science
+    - sports
+    - technology
+
+# 数字货币相关配置
+crypto:
+  # symbol white list
+  symbol_white_list:
+    - BTCUSDT
+    - ETHUSDT
+    - SOLUSDT
+    - XRPUSDT
+    - DOGEUSDT
+    - BNBUSDT
+  # 支持获取K线的最大长度限制，建议大于14
+  max_days: 20
+
+# 下次处理时间配置
+next_process_time:
+  # 下次处理时间必须大于当前时刻距离market关闭时间的比例（0.0-1.0）
+  min_ratio: 0.33
+
+# 交易配置
+trade:
+  # 买入相关配置
+  Buy:
+    # 最大买入次数
+    max_count: 3
+    # 单次最大买入金额
+    max_amount: 20
+    # 单次最小买入金额
+    min_amount: 5
+  # 卖出相关配置
+  Sell:
+    # 单次最小卖出shares
+    min_shares: 5
+
+# 智能体配置
+agent:
+  # 最大对话轮数
+  max_turn: 8
+
+# 模型配置
+model:
+  # OpenAI 配置
+  openai:
+    model_name: gpt-4o-mini
+    temperature: 0.3
+    max_token: 8192
+    enable_thinking: false
+    retry_count: 3
+    timeout: 30

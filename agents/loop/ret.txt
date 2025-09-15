@@ -1,0 +1,155 @@
+==== Process New Market Test ====
+Test started at: 2025-09-13 23:10:16
+
+==== Configuration ====
+Model: gpt-4o-mini
+Max tokens: 8192
+Max turns: 8
+Crypto symbols: ['BTCUSDT', 'ETHUSDT']
+
+==== Initializing Polymarket ====
+[DEBUG] API密钥初始化完成
+Polymarket initialized successfully
+
+==== Initializing Loop ====
+[DEBUG] Loop类初始化完成
+Loop initialized successfully
+
+==== Test 1: Crypto Event ====
+Event: Will BTC close above $120k on Dec 31, 2025?
+Market: Will BTC close above $120k on Dec 31, 2025?
+Tags: ['crypto']
+Expected: Crypto system message + binance_tool
+
+--- Calling process_new_market for crypto event ---
+[INFO] 开始处理新市场: 20002 - Will BTC close above $120k on Dec 31, 2025?
+
+==== Sending to Model (Turn 1) ====
+System Message Length: 3381 chars
+User Message Length: 3336 chars
+Tools Count: 5
+System Message Preview: 
+        You are a trader.
+
+        Polymarket is a binary prediction market where each market resolves to two outcomes: "Yes" and "No".
+        Contracts trade between $0.01 and $0.99 and map directl...
+User Message Preview: 
+        <Information>
+
+        Here is the market-related information: <Linked Event>
+
+        - Title: Will BTC close above $120k on Dec 31, 2025?
+        - Description: A crypto event tracking BTC ...
+[INFO] 第 1 轮对话
+
+==== Model Response (Turn 1) ====
+Status: success
+Finish Reason: tool_calls
+Tool Calls Count: 2
+Content Length: 0
+Tool Call 1: get_klines
+  Arguments: {"symbol": "BTCUSDT", "timeframe": "1d", "days": 7}...
+Tool Call 2: batch_query
+  Arguments: {"queries": ["BTC price prediction 2025", "Bitcoin market analysis December 2025", "Will Bitcoin rea...
+[INFO] 第 2 轮对话
+
+==== Model Response (Turn 2) ====
+Status: success
+Finish Reason: tool_calls
+Tool Calls Count: 1
+Content Length: 1692
+Content Preview: ### Market Analysis
+
+**Current Market Price:**  
+- Yes: $0.45  
+- No: $0.55  
+
+**Recent Price Movement:**  
+- The recent closing price for BTC is approximately $115,865.99.
+- Over the past week, BTC h...
+Tool Call 1: execute_trades
+  Arguments: {"Yes":{"should_trade":true,"side":"Buy","amount":20},"No":{"should_trade":false,"side":"Buy","amoun...
+[INFO] 收到交易决策: Yes=True, No=False
+[DEBUG] 开始校准Market 20002的决策结果
+[DEBUG] Market 20002 next_process_time校准: 原值太频繁，调整为 1760894528
+[DEBUG] Market 20002决策结果校准完成
+[INFO] 市场 20002 处理完成，下次处理时间: 1760894528
+
+--- Crypto Result ---
+Status: Success
+Yes Decision: should_trade=True, side=Buy, amount=20
+No Decision: should_trade=False, side=Buy, amount=0
+Next Process Time: 1760894528
+Reason: The fair probability for BTC closing above $120k is estimated at 65%, significantly higher than the market price of 45%. Given the bullish sentiment and recent price trends, I believe this is a favorable trade.
+
+
+==== Test 2: Non-Crypto Event ====
+Event: Will the Democratic candidate win the 2024 US Presidential election?
+Market: Will the Democratic candidate win the 2024 US Presidential election?
+Tags: ['politics']
+Expected: Political/Business system message, no binance_tool
+
+--- Calling process_new_market for politics event ---
+[INFO] 开始处理新市场: 20003 - Will the Democratic candidate win the 2024 US Presidential election?
+
+==== Sending to Model (Turn 1) ====
+System Message Length: 2884 chars
+User Message Length: 3428 chars
+Tools Count: 4
+System Message Preview: 
+        You are a trader.
+
+        Polymarket is a binary prediction market where each market resolves to two outcomes: "Yes" and "No".
+        Contracts trade between $0.01 and $0.99 and map directl...
+User Message Preview: 
+        <Information>
+
+        Here is the market-related information: <Linked Event>
+
+        - Title: Will the Democratic candidate win the 2024 US Presidential election?
+        - Description: A p...
+[INFO] 第 1 轮对话
+
+==== Model Response (Turn 1) ====
+Status: success
+Finish Reason: tool_calls
+Tool Calls Count: 2
+Content Length: 0
+Tool Call 1: batch_query
+  Arguments: {"queries": ["2024 US Presidential election Democratic candidate news", "2024 election polls Democra...
+Tool Call 2: get_region_top_articles_from_category
+  Arguments: {"country": "us", "category": "business"}...
+[INFO] 第 2 轮对话
+
+==== Model Response (Turn 2) ====
+Status: success
+Finish Reason: stop
+Tool Calls Count: 0
+Content Length: 2343
+Content Preview: ### Market Analysis for the 2024 US Presidential Election
+
+#### Current Market Context
+- **Market Question**: Will the Democratic candidate win the 2024 US Presidential election?
+- **Current Prices**:...
+[INFO] 第 3 轮对话
+
+==== Model Response (Turn 3) ====
+Status: success
+Finish Reason: tool_calls
+Tool Calls Count: 1
+Content Length: 0
+Tool Call 1: execute_trades
+  Arguments: {"Yes":{"should_trade":true,"side":"Buy","amount":15},"No":{"should_trade":false,"side":"Buy","amoun...
+[INFO] 收到交易决策: Yes=True, No=False
+[DEBUG] 开始校准Market 20003的决策结果
+[DEBUG] Market 20003决策结果校准完成
+[INFO] 市场 20003 处理完成，下次处理时间: 1758381063
+
+--- Politics Result ---
+Status: Success
+Yes Decision: should_trade=True, side=Buy, amount=15
+No Decision: should_trade=False, side=Buy, amount=0
+Next Process Time: 1758381063
+Reason: The fair probability for the Democratic candidate winning is estimated at 50%, higher than the current market price of 45%. This indicates an undervaluation of the candidate's chances.
+
+==== Test completed at: 2025-09-13 23:11:03 ====
